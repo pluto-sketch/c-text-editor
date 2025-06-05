@@ -1,13 +1,20 @@
 #include "../includes/library.h"
 
+// moved globally for convinience
+int line_number_width = 4; // width for line numbers
+
+
 void editorScroll()
 {
+    int line_number_width = 5; // 4 digits + 1 space for gutter (match editorDrawRows)
+
     E.rx = 0;
     if (E.cy < E.numrows)
     {
         E.rx = editorRowCxToRx(&E.row[E.cy], E.cx);
     }
 
+    // Vertical scroll
     if (E.cy < E.rowoff)
     {
         E.rowoff = E.cy;
@@ -16,44 +23,51 @@ void editorScroll()
     {
         E.rowoff = E.cy - E.screenrows + 1;
     }
+
+    // Horizontal scroll, adjusted for gutter width
     if (E.rx < E.coloff)
     {
         E.coloff = E.rx;
     }
-    if (E.rx >= E.coloff + E.screencols)
+    if (E.rx >= E.coloff + (E.screencols - line_number_width))
     {
-        E.coloff = E.rx - E.screencols + 1;
+        E.coloff = E.rx - (E.screencols - line_number_width) + 1;
     }
 }
+
 
 void editorDrawRows(struct abuf *ab)
 {
     int y;
+
     for (y = 0; y < E.screenrows; y++)
     {
         int filerow = y + E.rowoff;
+
+        // 1) Print line number, right aligned, padded with spaces
+        if (filerow < E.numrows) {
+            char linenum[line_number_width + 1];
+            // Format line number right-aligned in line_number_width space
+            snprintf(linenum, sizeof(linenum), "%*d ", line_number_width - 1, filerow + 1);
+            abAppend(ab, linenum, strlen(linenum));
+
+            abAppend(ab, " ", 1);
+        } else {
+            // Lines beyond file end: print spaces + a space for alignment
+            char empty_line_num[line_number_width + 1];
+            snprintf(empty_line_num, sizeof(empty_line_num), "%*s ", line_number_width, " ");
+            abAppend(ab, empty_line_num, strlen(empty_line_num));
+        }
+
+        // 2) print the actual line or empty spaces if no line
+
         if (filerow >= E.numrows)
         {
-            if (E.numrows == 0 && y == E.screenrows / 3)
-            {
-                char welcome[80];
-                int welcomelen = snprintf(welcome, sizeof(welcome),
-                                          "vimwannabe editor -- version %s", VIMWANNABE_VERSION);
-                if (welcomelen > E.screencols)
-                    welcomelen = E.screencols;
-                int padding = (E.screencols - welcomelen) / 2;
-                if (padding)
-                {
-                    abAppend(ab, "~", 1);
-                    padding--;
-                }
-                while (padding--)
+            // print blank space after line number
+            int len = E.screencols - (line_number_width + 1);
+            if (len > 0) {
+                for (int i = 0; i < len; i++)
                     abAppend(ab, " ", 1);
-                abAppend(ab, welcome, welcomelen);
-            }
-            else
-            {
-                abAppend(ab, "~", 1);
             }
         }
         else
@@ -61,12 +75,14 @@ void editorDrawRows(struct abuf *ab)
             int len = E.row[filerow].rsize - E.coloff;
             if (len < 0)
                 len = 0;
-            if (len > E.screencols)
-                len = E.screencols;
+            if (len > E.screencols - (line_number_width + 1))
+                len = E.screencols - (line_number_width + 1);
+
             char *c = &E.row[filerow].render[E.coloff];
             unsigned char *hl = &E.row[filerow].hl[E.coloff];
             int current_color = -1;
             int j;
+
             for (j = 0; j < len; j++)
             {
                 if (iscntrl(c[j]))
@@ -166,7 +182,8 @@ void editorRefreshScreen()
 
     char buf[32];
     snprintf(buf, sizeof(buf), "\x1b[%d;%dH", (E.cy - E.rowoff) + 1,
-             (E.rx - E.coloff) + 1);
+             (E.rx - E.coloff) + 1 + line_number_width);
+
     abAppend(&ab, buf, strlen(buf));
 
     abAppend(&ab, "\x1b[?25h", 6);
