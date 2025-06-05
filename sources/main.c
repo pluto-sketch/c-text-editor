@@ -1,3 +1,4 @@
+// main.c
 #include "../includes/library.h"
 
 struct editorConfig E;
